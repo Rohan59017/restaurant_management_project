@@ -1,0 +1,98 @@
+1. Set up the Django Project and DRF
+First, create a Django project and an app, then install the necessary packages.
+
+Bash
+
+pip install djangorestframework djangorestframework-simplejwt
+Next, add them to your INSTALLED_APPS in settings.py:
+
+Python
+
+# settings.py
+
+INSTALLED_APPS = [
+    # ... other apps
+    'rest_framework',
+    'rest_framework_simplejwt',
+]
+Configure DRF to use JWT authentication by default.
+
+Python
+
+# settings.py
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    )
+}
+2. Create the Login and Token Endpoints
+DRF Simple JWT provides built-in views for token management. You just need to add them to your urls.py.
+
+Python
+
+# myproject/urls.py
+
+from django.urls import path
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
+
+urlpatterns = [
+    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+]
+The TokenObtainPairView endpoint handles the login. It takes a username and password and, if valid, returns access and refresh tokens.
+
+The TokenRefreshView endpoint allows users to get a new access token using their refresh token, so they don't have to log in again.
+
+3. Protect API Endpoints
+To protect an API endpoint, you use DRF's permission classes. A common permission is IsAuthenticated, which ensures that only users with a valid token can access the view.
+
+First, create a simple Order model and serializer.
+
+Python
+
+# orders/models.py
+from django.db import models
+
+class Order(models.Model):
+    customer = models.ForeignKey('auth.User', on_delete=models.CASCADE)
+    item_name = models.CharField(max_length=100)
+    quantity = models.IntegerField()
+Python
+
+# orders/serializers.py
+from rest_framework import serializers
+from .models import Order
+
+class OrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = '__all__'
+Then, create a view and protect it using IsAuthenticated.
+
+Python
+
+# orders/views.py
+from rest_framework import generics, permissions
+from .models import Order
+from .serializers import OrderSerializer
+
+class OrderListCreateView(generics.ListCreateAPIView):
+    queryset = Order.objects.all()
+    serializer_class = OrderSerializer
+    permission_classes = [permissions.IsAuthenticated] # 🔒 Protect this view
+Finally, add this view to your urls.py.
+
+Python
+
+# orders/urls.py
+from django.urls import path
+from .views import OrderListCreateView
+
+urlpatterns = [
+    path('orders/', OrderListCreateView.as_view(), name='order-list-create'),
+]
+The /orders/ endpoint is now protected. Any request to this URL must include a valid JWT access token in the Authorization header, like this: Authorization: Bearer <your_access_token>. If the token is missing or invalid, the API will return a 401 Unauthorized error.

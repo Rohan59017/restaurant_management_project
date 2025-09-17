@@ -1,0 +1,56 @@
+from django.db import models
+from django.core.exceptions import ValidationError
+
+class Customer(models.Model):
+    name = models.CharField(max_length=255)
+
+class Reservation(models.Model):
+    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    table_no = models.IntegerField()
+    date = models.DateField()
+    time = models.TimeField()
+
+    class Meta:
+        unique_together = ('table_no', 'date', 'time')  # Ensures no double booking
+
+    def save(self, *args, **kwargs):
+        if Reservation.objects.filter(table_no=self.table_no, date=self.date, time=self.time).exists():
+            r
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .models import Reservation, Customer
+from django.core.exceptions import ValidationError
+
+class ReserveTableView(APIView):
+    def post(self, request):
+        data = request.data
+        try:
+            customer = Customer.objects.get(id=data['customer_id'])
+
+            reservation = Reservation(
+                customer=customer,
+                table_no=data['table_no'],
+                date=data['date'],
+                time=data['time']
+            )
+            reservation.save()
+
+            return Response({
+                "message": "Reservation confirmed",
+                "reservation_id": reservation.id
+            }, status=status.HTTP_201_CREATED)
+
+        except Customer.DoesNotExist:
+            return Response({"error": "Customer not found"}, status=404)
+        except ValidationError as e:
+            return Response({"error": str(e)}, status=400)
+
+
+{
+  "customer_id": 2,
+  "table_no": 5,
+  "date": "2025-08-21",
+  "time": "19:00"
+}

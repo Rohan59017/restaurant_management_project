@@ -1,0 +1,116 @@
+create a Role model and attach it to your user model. This provides a clear way to define and assign roles. Using a separate Role model with a ForeignKey is more flexible than using a simple CharField on the User model.
+
+Python
+
+# accounts/models.py
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
+class Role(models.Model):
+    name = models.CharField(max_length=50, unique=True)
+
+    def __str__(self):
+        return self.name
+
+class User(AbstractUser):
+    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True)
+
+Then, update your settings.py to use this custom user model.
+
+Python
+
+# settings.py
+AUTH_USER_MODEL = 'accounts.User'
+Create the Role instances in your database. A management command or a data migration is a good way to do this.
+
+Python
+
+# accounts/management/commands/init_roles.py
+from django.core.management.base import BaseCommand
+from accounts.models import Role
+
+class Command(BaseCommand):
+    help = 'Initializes default roles for the system'
+
+    def handle(self, *args, **kwargs):
+        roles = ['Admin', 'Manager', 'Waiter', 'Customer']
+        for role_name in roles:
+            Role.objects.get_or_create(name=role_name)
+            self.stdout.write(self.style.SUCCESS(f'Role "{role_name}" created.'))
+
+2. Create Custom Permission Classes
+Custom permission classes in DRF allow you to define the logic for who can access an endpoint. These classes will check the user's role and grant or deny access.
+
+Python
+
+# core/permissions.py
+from rest_framework import permissions
+
+class IsAdmin(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role and request.user.role.name == 'Admin'
+
+class IsManager(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role and request.user.role.name == 'Manager'
+
+class IsWaiter(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role and request.user.role.name == 'Waiter'
+
+class IsManagerOrAdmin(permissions.BasePermission):
+    def has_permission(self, request, view):
+        user_role = request.user.role.name if request.user.role else None
+        return request.user.is_authenticated and user_role in ['Manager', 'Admin']
+
+You can create more specific classes like IsWaiterOrManager as needed. The has_permission method checks if the user is authenticated and if their assigned role matches the required role for that endpoint.
+
+3. Restrict Endpoints Based on Role
+Now, apply these custom permission classes to your API views. For this example, we'll create a view for adding a new menu item, which should only be accessible to Managers and Admins.
+
+First, define the MenuItem model and serializer.
+
+Python
+
+# menu/models.py
+from django.db import models
+
+class MenuItem(models.Model):
+    name = models.CharField(max_length=100)
+    price = models.DecimalField(max_digits=6, decimal_places=2)
+
+# menu/serializers.py
+from rest_framework import serializers
+from .models import MenuItem
+
+class MenuItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MenuItem
+        fields = '__all__'
+
+Next, create the API view and apply the permission class.
+
+Python
+
+# menu/views.py
+from rest_framework import generics
+from .models import MenuItem
+from .serializers import MenuItemSerializer
+from core.permissions import IsManagerOrAdmin # Import your custom permission class
+
+class MenuItemCreateView(generics.CreateAPIView):
+    queryset = MenuItem.objects.all()
+    serializer_class = MenuItemSerializer
+    permission_classes = [IsManagerOrAdmin] # 🔒 Only Managers and Admins can create menu items
+
+Finally, add the view to your URL configuration.
+
+Python
+
+# menu/urls.py
+from django.urls import path
+from .views import MenuItemCreateView
+
+urlpatterns = [
+    path('menu/', MenuItemCreateView.as_view(), name='add-menu-item'),
+]
